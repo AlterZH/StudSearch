@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Student, Grade } from './types';
-import { getStudents, saveStudents, getGrades, saveGrades } from './utils/storage';
+import { getStudents, saveStudents, getGrades, saveGrades, generateId } from './utils/storage';
+import { studentApi, gradeApi, checkApiAvailability } from './services/api';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
@@ -19,10 +20,33 @@ const App: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [apiMode, setApiMode] = useState<'api' | 'local' | 'loading'>('loading');
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Загрузка данных при старте
   useEffect(() => {
-    setStudents(getStudents());
-    setGrades(getGrades());
+    const loadData = async () => {
+      setIsLoading(true);
+      const isAvailable = await checkApiAvailability();
+      setApiMode(isAvailable ? 'api' : 'local');
+
+      try {
+        const [studentsData, gradesData] = await Promise.all([
+          studentApi.getAll(),
+          gradeApi.getAll(),
+        ]);
+        setStudents(studentsData);
+        setGrades(gradesData);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        setStudents(getStudents());
+        setGrades(getGrades());
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
   }, []);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -37,30 +61,44 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveStudent = (student: Student) => {
-    const existingIndex = students.findIndex(s => s.id === student.id);
-    let updatedStudents: Student[];
-    
-    if (existingIndex >= 0) {
-      updatedStudents = [...students];
-      updatedStudents[existingIndex] = student;
-      showNotification('Данные студента обновлены');
-    } else {
-      updatedStudents = [...students, student];
-      showNotification('Студент успешно добавлен');
+  const handleSaveStudent = async (student: Student) => {
+    try {
+      const existingIndex = students.findIndex(s => s.id === student.id);
+
+      if (existingIndex >= 0) {
+        const updated = await studentApi.update(student.id, student);
+        const updatedStudents = students.map(s => s.id === student.id ? updated : s);
+        setStudents(updatedStudents);
+        // Синхронизация с localStorage
+        saveStudents(updatedStudents);
+        showNotification('Данные студента обновлены');
+      } else {
+        const created = await studentApi.create(student);
+        const updatedStudents = [...students, created];
+        setStudents(updatedStudents);
+        saveStudents(updatedStudents);
+        showNotification('Студент успешно добавлен');
+      }
+
+      setCurrentPage('students');
+      setSelectedStudent(null);
+    } catch (error) {
+      console.error('Save error:', error);
+      showNotification('Ошибка при сохранении', 'error');
     }
-    
-    setStudents(updatedStudents);
-    saveStudents(updatedStudents);
-    setCurrentPage('students');
-    setSelectedStudent(null);
   };
 
-  const handleDeleteStudent = (id: string) => {
-    const updatedStudents = students.filter(s => s.id !== id);
-    setStudents(updatedStudents);
-    saveStudents(updatedStudents);
-    showNotification('Студент удалён');
+  const handleDeleteStudent = async (id: string) => {
+    try {
+      await studentApi.delete(id);
+      const updatedStudents = students.filter(s => s.id !== id);
+      setStudents(updatedStudents);
+      saveStudents(updatedStudents);
+      showNotification('Студент удалён');
+    } catch (error) {
+      console.error('Delete error:', error);
+      showNotification('Ошибка при удалении', 'error');
+    }
   };
 
   const handleEditStudent = (student: Student) => {
@@ -73,18 +111,36 @@ const App: React.FC = () => {
     setCurrentPage('view-student');
   };
 
-  const handleSaveGrade = (grade: Grade) => {
-    const updatedGrades = [...grades, grade];
-    setGrades(updatedGrades);
-    saveGrades(updatedGrades);
-    showNotification('Оценка добавлена');
+  const handleSaveGrade = async (grade: Grade) => {
+    try {
+      const created = await gradeApi.create({
+        studentId: grade.studentId,
+        subject: grade.subject,
+        grade: grade.grade,
+        semester: grade.semester,
+        date: grade.date,
+      });
+      const updatedGrades = [...grades, created];
+      setGrades(updatedGrades);
+      saveGrades(updatedGrades);
+      showNotification('Оценка добавлена');
+    } catch (error) {
+      console.error('Save grade error:', error);
+      showNotification('Ошибка при сохранении оценки', 'error');
+    }
   };
 
-  const handleDeleteGrade = (id: string) => {
-    const updatedGrades = grades.filter(g => g.id !== id);
-    setGrades(updatedGrades);
-    saveGrades(updatedGrades);
-    showNotification('Оценка удалена');
+  const handleDeleteGrade = async (id: string) => {
+    try {
+      await gradeApi.delete(id);
+      const updatedGrades = grades.filter(g => g.id !== id);
+      setGrades(updatedGrades);
+      saveGrades(updatedGrades);
+      showNotification('Оценка удалена');
+    } catch (error) {
+      console.error('Delete grade error:', error);
+      showNotification('Ошибка при удалении', 'error');
+    }
   };
 
   const getPageTitle = (): string => {
@@ -101,6 +157,17 @@ const App: React.FC = () => {
   };
 
   const renderPage = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Загрузка данных...</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard students={students} onNavigate={handleNavigate} />;
@@ -156,6 +223,17 @@ const App: React.FC = () => {
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
         <main className="flex-1 overflow-y-auto">
+          {/* Индикатор режима работы */}
+          {apiMode !== 'loading' && (
+            <div className={`px-4 py-1.5 text-xs text-center ${
+              apiMode === 'api' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+            }`}>
+              <i className={`fas ${apiMode === 'api' ? 'fa-server' : 'fa-database'} mr-1`}></i>
+              {apiMode === 'api'
+                ? 'Подключено к Django REST API'
+                : 'Режим localStorage (API недоступен)'}
+            </div>
+          )}
           {renderPage()}
         </main>
       </div>
