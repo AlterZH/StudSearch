@@ -35,7 +35,9 @@ class Specialty(models.Model):
         ordering = ['name']
 
     def __str__(self):
-        return f'{self.code} {self.name}' if self.code else self.name
+        if self.code:
+            return f'{self.code} {self.name}'
+        return self.name
 
 
 class Group(models.Model):
@@ -77,7 +79,7 @@ class Student(models.Model):
     last_name = models.CharField('Фамилия', max_length=100)
     first_name = models.CharField('Имя', max_length=100)
     patronymic = models.CharField('Отчество', max_length=100, blank=True)
-    birth_date = models.DateField('Дата рождения')
+    birth_date = models.DateField('Дата рождения', null=True, blank=True)
     gender = models.CharField(
         'Пол',
         max_length=10,
@@ -106,14 +108,20 @@ class Student(models.Model):
     address = models.TextField('Адрес', blank=True)
 
     # Статус
-    enrollment_date = models.DateField('Дата зачисления')
+    enrollment_date = models.DateField('Дата зачисления', null=True, blank=True)
     status = models.CharField(
         'Статус',
         max_length=20,
         choices=StatusChoices.choices,
         default=StatusChoices.ACTIVE
     )
-    gpa = models.DecimalField('Средний балл (GPA)', max_digits=3, decimal_places=2, default=0)
+    gpa = models.DecimalField(
+        'Средний балл (GPA)',
+        max_digits=3,
+        decimal_places=2,
+        default=0,
+        null=True
+    )
     notes = models.TextField('Примечания', blank=True)
 
     # Метаданные
@@ -131,12 +139,21 @@ class Student(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.last_name} {self.first_name} {self.patronymic}'
-
-    @property
-    def full_name(self):
         parts = [self.last_name, self.first_name, self.patronymic]
         return ' '.join(p for p in parts if p)
+
+    def get_full_name(self):
+        """Полное имя студента (метод вместо @property для совместимости с admin)"""
+        parts = [self.last_name, self.first_name, self.patronymic]
+        return ' '.join(p for p in parts if p)
+    get_full_name.short_description = 'Полное имя'
+
+    def get_group_display_name(self):
+        """Отображаемое название группы"""
+        if self.group:
+            return self.group.name
+        return self.group_name
+    get_group_display_name.short_description = 'Группа'
 
 
 class Subject(models.Model):
@@ -172,7 +189,7 @@ class Grade(models.Model):
     subject_name = models.CharField('Название предмета (текст)', max_length=200, blank=True)
     grade = models.PositiveSmallIntegerField('Оценка')
     semester = models.PositiveSmallIntegerField('Семестр', default=1)
-    date = models.DateField('Дата')
+    date = models.DateField('Дата', null=True, blank=True)
     created_at = models.DateTimeField('Создано', auto_now_add=True)
 
     class Meta:

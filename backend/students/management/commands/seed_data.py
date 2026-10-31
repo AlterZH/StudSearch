@@ -21,7 +21,10 @@ class Command(BaseCommand):
         ]
         faculties = {}
         for name, short, dean in faculties_data:
-            f, _ = Faculty.objects.get_or_create(name=name, defaults={'short_name': short, 'dean': dean})
+            f, _ = Faculty.objects.get_or_create(
+                name=name,
+                defaults={'short_name': short, 'dean': dean}
+            )
             faculties[name] = f
             self.stdout.write(f'  Факультет: {f.name}')
 
@@ -55,7 +58,11 @@ class Command(BaseCommand):
         for name, spec_name, course, year in groups_data:
             g, _ = Group.objects.get_or_create(
                 name=name,
-                defaults={'specialty': specialties[spec_name], 'course': course, 'enrollment_year': year}
+                defaults={
+                    'specialty': specialties[spec_name],
+                    'course': course,
+                    'enrollment_year': year,
+                }
             )
             groups[name] = g
             self.stdout.write(f'  Группа: {g.name}')
@@ -178,7 +185,8 @@ class Command(BaseCommand):
                 defaults=data
             )
             students.append(s)
-            self.stdout.write(f'  Студент: {s.full_name} ({"создан" if created else "существует"})')
+            status_str = 'создан' if created else 'существует'
+            self.stdout.write(f'  Студент: {s.get_full_name()} ({status_str})')
 
         # Оценки
         grades_data = [
@@ -195,7 +203,10 @@ class Command(BaseCommand):
         ]
         for student, subject, grade, semester, d in grades_data:
             g, created = Grade.objects.get_or_create(
-                student=student, subject=subject, semester=semester, date=d,
+                student=student,
+                subject=subject,
+                semester=semester,
+                date=d,
                 defaults={'grade': grade}
             )
             if created:
