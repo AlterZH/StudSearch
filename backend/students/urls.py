@@ -12,5 +12,11 @@ router.register(r'grades', views.GradeViewSet)
 
 urlpatterns = [
     path('', views.health_check, name='health-check'),
+    path('students/statistics/', views.StudentViewSet.as_view({
+        'get': 'statistics'
+    }), name='students-statistics'),
+    path('students/reports/', views.StudentViewSet.as_view({
+        'get': 'reports'
+    }), name='students-reports'),
     path('', include(router.urls)),
 ]

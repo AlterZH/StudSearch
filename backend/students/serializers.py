@@ -58,11 +58,11 @@ class GradeSerializer(serializers.ModelSerializer):
         return obj.subject_name or obj.subject.name
 
     def get_student_name(self, obj):
-        return obj.student.full_name
+        return obj.student.get_full_name()
 
 
 class StudentSerializer(serializers.ModelSerializer):
-    full_name = serializers.ReadOnlyField()
+    full_name = serializers.SerializerMethodField()
     grades = GradeSerializer(many=True, read_only=True)
     group_display = serializers.SerializerMethodField()
 
@@ -77,6 +77,9 @@ class StudentSerializer(serializers.ModelSerializer):
             'grades', 'created_at', 'updated_at'
         ]
 
+    def get_full_name(self, obj):
+        return obj.get_full_name()
+
     def get_group_display(self, obj):
         if obj.group:
             return obj.group.name
@@ -85,7 +88,7 @@ class StudentSerializer(serializers.ModelSerializer):
 
 class StudentListSerializer(serializers.ModelSerializer):
     """Упрощённый сериализатор для списка студентов"""
-    full_name = serializers.ReadOnlyField()
+    full_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -94,6 +97,9 @@ class StudentListSerializer(serializers.ModelSerializer):
             'group_name', 'course', 'faculty_name', 'gpa', 'status',
             'email', 'created_at', 'updated_at'
         ]
+
+    def get_full_name(self, obj):
+        return obj.get_full_name()
 
 
 class DashboardStatsSerializer(serializers.Serializer):

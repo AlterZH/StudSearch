@@ -6,6 +6,8 @@ REST API для автоматизированной информационно�
 
 ### 1. Установка зависимостей
 
+**Важно:** используйте Python 3.10–3.12 и Django 4.2–5.0 (ограничения указаны в `requirements.txt`).
+
 ```bash
 cd backend
 python -m venv venv
@@ -13,6 +15,31 @@ source venv/bin/activate  # Linux/Mac
 # или venv\Scripts\activate  # Windows
 
 pip install -r requirements.txt
+```
+
+### ⚠️ Решение ошибки `'super' object has no attribute 'dicts'`
+
+Эта ошибка возникает в Django admin при использовании `@property` в моделях или при несовместимости версий Django. В текущей версии исправлено:
+
+1. **`@property full_name` заменён на метод `get_full_name()`** — Django admin не может корректно работать с `@property`, которые возвращают составные значения.
+2. **Убраны `readonly_fields` с auto-полями** (`created_at`, `updated_at`) — они могут конфликтовать с механизмом форм Django admin.
+3. **Ограничены версии Django** до `<5.1` в `requirements.txt` — в Django 5.1+ изменился внутренний механизм работы с `__dict__` моделей.
+
+**Если ошибка всё ещё возникает:**
+
+```bash
+# 1. Убедитесь в правильной версии Django
+pip show django
+# Должна быть версия 4.2.x — 5.0.x
+
+# 2. Если версия выше — переустановите
+pip install "Django>=4.2,<5.1"
+
+# 3. Удалите старую БД и примените миграции заново
+rm db.sqlite3
+python manage.py makemigrations students
+python manage.py migrate
+python manage.py seed_data
 ```
 
 ### 2. Настройка базы данных

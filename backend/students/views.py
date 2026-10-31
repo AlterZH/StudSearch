@@ -1,14 +1,13 @@
-from django.db.models import Avg, Count, Q
-from rest_framework import viewsets, status, filters
-from rest_framework.decorators import api_view, action
+from django.db.models import Avg
+from rest_framework import viewsets, status
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Faculty, Specialty, Group, Student, Subject, Grade
 from .serializers import (
     FacultySerializer, SpecialtySerializer, GroupSerializer,
     StudentSerializer, StudentListSerializer, SubjectSerializer,
-    GradeSerializer, DashboardStatsSerializer, ReportSerializer,
+    GradeSerializer,
 )
 
 
@@ -56,24 +55,35 @@ class StudentViewSet(viewsets.ModelViewSet):
             return StudentListSerializer
         return StudentSerializer
 
-    @action(detail=False, methods=['get'])
+    @staticmethod
+    def _safe_avg(qs):
+        """Безопасное вычисление среднего значения GPA"""
+        result = qs.aggregate(avg=Avg('gpa'))['avg']
+        if result is None:
+            return 0.0
+        return round(float(result), 2)
+
+    @staticmethod
+    def _distinct_values(qs, field):
+        """Получить уникальные значения поля, исключая пустые"""
+        return [
+            v[field] for v in qs.values(field).distinct()
+            if v.get(field)
+        ]
+
     def statistics(self, request):
-        """Статистика для дашборда"""
+        """Статистика для дашборда (GET /api/students/statistics/)"""
         qs = Student.objects.all()
         active_qs = qs.filter(status='active')
 
         # Факультеты
         faculties_data = []
-        for f in qs.values('faculty_name').distinct():
-            name = f['faculty_name']
-            if not name:
-                continue
-            total = qs.filter(faculty_name=name).count()
-            active = qs.filter(faculty_name=name, status='active').count()
+        for name in self._distinct_values(qs, 'faculty_name'):
+            f_qs = qs.filter(faculty_name=name)
             faculties_data.append({
                 'name': name,
-                'total': total,
-                'active': active,
+                'total': f_qs.count(),
+                'active': f_qs.filter(status='active').count(),
             })
 
         # Курсы
@@ -82,58 +92,48 @@ class StudentViewSet(viewsets.ModelViewSet):
             count = active_qs.filter(course=c).count()
             courses_data.append({'course': c, 'count': count})
 
-        avg_gpa = active_qs.aggregate(avg=Avg('gpa'))['avg'] or 0
-
         data = {
             'total_students': qs.count(),
             'active_students': active_qs.count(),
             'expelled_students': qs.filter(status='expelled').count(),
             'graduated_students': qs.filter(status='graduated').count(),
             'academic_leave': qs.filter(status='academic_leave').count(),
-            'average_gpa': round(float(avg_gpa), 2),
+            'average_gpa': self._safe_avg(active_qs),
             'faculties': faculties_data,
             'courses': courses_data,
         }
         return Response(data)
 
-    @action(detail=False, methods=['get'])
     def reports(self, request):
-        """Отчёты по факультетам и группам"""
+        """Отчёты по факультетам и группам (GET /api/students/reports/)"""
         qs = Student.objects.all()
 
         # По факультетам
         faculty_report = []
-        for f in qs.values('faculty_name').distinct():
-            name = f['faculty_name']
-            if not name:
-                continue
+        for name in self._distinct_values(qs, 'faculty_name'):
             f_qs = qs.filter(faculty_name=name)
             active_qs = f_qs.filter(status='active')
-            avg_gpa = active_qs.aggregate(avg=Avg('gpa'))['avg'] or 0
             faculty_report.append({
                 'faculty': name,
                 'total': f_qs.count(),
                 'active': active_qs.count(),
                 'expelled': f_qs.filter(status='expelled').count(),
                 'graduated': f_qs.filter(status='graduated').count(),
-                'avg_gpa': round(float(avg_gpa), 2),
+                'avg_gpa': self._safe_avg(active_qs),
             })
 
         # По группам
         group_report = []
-        for g in qs.values('group_name').distinct():
-            name = g['group_name']
-            if not name:
-                continue
+        for name in self._distinct_values(qs, 'group_name'):
             g_qs = qs.filter(group_name=name)
             active_qs = g_qs.filter(status='active')
-            avg_gpa = active_qs.aggregate(avg=Avg('gpa'))['avg'] or 0
+            first = g_qs.first()
             group_report.append({
                 'group': name,
-                'faculty': g_qs.first().faculty_name if g_qs.exists() else '',
+                'faculty': first.faculty_name if first else '',
                 'total': g_qs.count(),
                 'active': active_qs.count(),
-                'avg_gpa': round(float(avg_gpa), 2),
+                'avg_gpa': self._safe_avg(active_qs),
             })
 
         # Гендерный состав

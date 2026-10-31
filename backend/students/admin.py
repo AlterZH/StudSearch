@@ -25,13 +25,12 @@ class GroupAdmin(admin.ModelAdmin):
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
     list_display = [
-        'last_name', 'first_name', 'patronymic', 'group_name',
+        'get_full_name', 'get_group_display_name',
         'course', 'status', 'gpa', 'enrollment_date'
     ]
     list_filter = ['status', 'course', 'gender', 'faculty_name', 'group_name']
     search_fields = ['last_name', 'first_name', 'patronymic', 'email']
     date_hierarchy = 'enrollment_date'
-    readonly_fields = ['created_at', 'updated_at']
 
     fieldsets = (
         ('Личные данные', {
@@ -44,16 +43,22 @@ class StudentAdmin(admin.ModelAdmin):
             )
         }),
         ('Контакты', {
-            'fields': ('email', 'phone', 'address')
+            'fields': ('email', 'phone', 'address'),
+            'classes': ('collapse',)
         }),
         ('Примечания', {
-            'fields': ('notes',)
-        }),
-        ('Системные', {
-            'fields': ('created_at', 'updated_at'),
+            'fields': ('notes',),
             'classes': ('collapse',)
         }),
     )
+
+    def get_full_name(self, obj):
+        return obj.get_full_name()
+    get_full_name.short_description = 'ФИО'
+
+    def get_group_display_name(self, obj):
+        return obj.get_group_display_name()
+    get_group_display_name.short_description = 'Группа'
 
 
 @admin.register(Subject)
@@ -68,3 +73,7 @@ class GradeAdmin(admin.ModelAdmin):
     list_filter = ['semester', 'subject', 'date']
     search_fields = ['student__last_name', 'student__first_name', 'subject__name']
     date_hierarchy = 'date'
+
+    def get_student_name(self, obj):
+        return obj.student.get_full_name()
+    get_student_name.short_description = 'Студент'
